@@ -1,15 +1,26 @@
+export type TerminalMode = 'USER_EXEC' | 'PRIVILEGED_EXEC' | 'GLOBAL_CONFIG' | 'INTERFACE_CONFIG';
+
 export interface Choice {
   text: string;
   nextSceneId: string;
   action?: (state: GameState) => GameState;
+  requirements?: {
+    level?: number;
+    networking?: number;
+    support?: number;
+    management?: number;
+    fragments?: string[];
+  };
 }
 
 export interface TerminalChallenge {
   prompt: string;
+  mode: TerminalMode;
   expectedCommand: string;
   hint: string;
   successSceneId: string;
   failSceneId: string;
+  xpReward?: number;
 }
 
 export interface Scene {
@@ -23,9 +34,10 @@ export interface Scene {
     correctIndex: number;
     explanation: string;
     failSceneId: string;
+    xpReward?: number;
   };
   terminalChallenge?: TerminalChallenge;
-  fragmentId?: string; // ID of the Data Fragment discovered in this scene
+  fragmentId?: string;
 }
 
 export interface GameState {
@@ -43,7 +55,11 @@ export interface GameState {
     stability: number;
   };
   discoveredFragments: string[];
+  xp: number;
+  level: number;
 }
+
+export const XP_THRESHOLDS = [0, 100, 250, 500, 1000, 2000];
 
 export const initialGameState: GameState = {
   currentSceneId: 'start',
@@ -59,19 +75,21 @@ export const initialGameState: GameState = {
     connectivity: 0,
     stability: 0
   },
-  discoveredFragments: []
+  discoveredFragments: [],
+  xp: 0,
+  level: 1
 };
 
 export const dataFragments: Record<string, { title: string; link: string; snippet: string }> = {
   'osi-deep-dive': {
     title: 'Archive: OSI Layer 3',
     link: 'https://Bgarrison84.github.io/ccna-guide/#/module/osi-model',
-    snippet: 'The Network layer is responsible for path determination and logical addressing. In the old world, routers were the guardians of this layer.'
+    snippet: 'The Network layer is responsible for path determination and logical addressing.'
   },
   'subnetting-manual': {
     title: 'Manual: IP Math',
     link: 'https://Bgarrison84.github.io/ccna-guide/#/module/subnetting',
-    snippet: 'Subnetting allowed the ancients to divide their massive networks into manageable pieces. A /26 mask equals 255.255.255.192.'
+    snippet: 'Subnetting allowed the ancients to divide their massive networks into manageable pieces.'
   }
 };
 
@@ -79,172 +97,186 @@ export const scenes: Record<string, Scene> = {
   start: {
     id: 'start',
     speaker: 'SYSTEM',
-    text: 'NEURAL LINK ESTABLISHED...\nYEAR: 2142\nLOCATION: SECTOR 7 WASTELAND\n\nYou wake up in a collapsed server room. The air smells of ozone and decay. A terminal flickers, its green glow illuminating a dusty manual on the floor.',
+    text: 'NEURAL LINK ESTABLISHED...\nYEAR: 2142\nLOCATION: SECTOR 7 WASTELAND\n\nYou wake up in a collapsed server room. A terminal flickers nearby. To your left, a reinforced door with a Project Management override console.',
     choices: [
-      { text: 'Pick up the dusty manual', nextSceneId: 'found-manual' },
-      { text: 'Login to the terminal', nextSceneId: 'terminal-login' }
+      { text: 'Inspect the terminal', nextSceneId: 'terminal-init' },
+      { 
+        text: '[LVL 2] Forced Entry (Management)', 
+        nextSceneId: 'forced-entry',
+        requirements: { level: 2 }
+      },
+      { text: 'Look for an exit', nextSceneId: 'look-exit' }
     ]
   },
-  'found-manual': {
-    id: 'found-manual',
-    speaker: 'SELF',
-    text: 'It\'s an ancient training guide. Most pages are torn, but a section on IPv4 addressing is still readable.',
+  'terminal-init': {
+    id: 'terminal-init',
+    speaker: 'TERMINAL',
+    text: 'RE-CORE OS v4.2.1\n\nThe console is in restricted mode. You need to elevate privileges to access the subnetting tools.',
+    terminalChallenge: {
+      prompt: 'Router>',
+      mode: 'USER_EXEC',
+      expectedCommand: 'enable',
+      hint: 'The command to enter Privileged EXEC mode.',
+      successSceneId: 'terminal-privileged',
+      failSceneId: 'failed-fix',
+      xpReward: 20
+    },
+    choices: []
+  },
+  'terminal-privileged': {
+    id: 'terminal-privileged',
+    speaker: 'TERMINAL',
+    text: 'PRIVILEGED EXEC MODE ENABLED.\n\nNow, enter global configuration mode to modify the routing parameters.',
+    terminalChallenge: {
+      prompt: 'Router#',
+      mode: 'PRIVILEGED_EXEC',
+      expectedCommand: 'configure terminal',
+      hint: 'The command to enter global config mode.',
+      successSceneId: 'terminal-config',
+      failSceneId: 'failed-fix',
+      xpReward: 30
+    },
+    choices: []
+  },
+  'terminal-config': {
+    id: 'terminal-config',
+    speaker: 'TERMINAL',
+    text: 'GLOBAL CONFIG MODE ENABLED.\n\nRestoring the communications link requires configuring the interface GigabitEthernet 0/0.',
+    terminalChallenge: {
+      prompt: 'Router(config)#',
+      mode: 'GLOBAL_CONFIG',
+      expectedCommand: 'interface g0/0',
+      hint: 'The command to enter interface configuration mode.',
+      successSceneId: 'interface-config',
+      failSceneId: 'failed-fix',
+      xpReward: 50
+    },
+    choices: []
+  },
+  'interface-config': {
+    id: 'interface-config',
+    speaker: 'SYSTEM',
+    text: 'LINK STATE: UP (Simulated)\n\nYou have restored the internal communication bus. A hidden compartment opens, revealing an ancient data fragment.',
     fragmentId: 'subnetting-manual',
     choices: [
       { 
-        text: 'Access the terminal with this new knowledge', 
-        nextSceneId: 'terminal-login',
-        action: (s) => ({ ...s, discoveredFragments: [...s.discoveredFragments, 'subnetting-manual'] })
-      }
-    ]
-  },
-  'terminal-login': {
-    id: 'terminal-login',
-    speaker: 'TERMINAL',
-    text: 'RE-CORE OS v4.2.1\nLOGIN REQUIRED...\n\nTo bypass the lockout, you must demonstrate basic IOS proficiency. Enter the command to enter Privileged EXEC mode.',
-    terminalChallenge: {
-      prompt: 'Router>',
-      expectedCommand: 'enable',
-      hint: 'The ancients used "enable" to gain higher privileges.',
-      successSceneId: 'config-mode',
-      failSceneId: 'failed-fix'
-    },
-    choices: []
-  },
-  'config-mode': {
-    id: 'config-mode',
-    speaker: 'TERMINAL',
-    text: 'PRIVILEGED ACCESS GRANTED.\n\nNow, enter the command to enter Global Configuration mode.',
-    terminalChallenge: {
-      prompt: 'Router#',
-      expectedCommand: 'configure terminal',
-      hint: 'Short for "config t".',
-      successSceneId: 'restore-comm-link',
-      failSceneId: 'failed-fix'
-    },
-    choices: []
-  },
-  'restore-comm-link': {
-    id: 'restore-comm-link',
-    speaker: 'SYSTEM',
-    text: 'CONFIG MODE ENABLED.\nYou have restored the core routing protocols. The Haven Settlement suddenly appears on your scan.',
-    choices: [
-      { 
-        text: 'Transmit coordinates to Haven', 
-        nextSceneId: 'haven-contact',
+        text: 'Download Fragment and Proceed', 
+        nextSceneId: 'outside-world',
         action: (s) => ({ 
           ...s, 
-          settlement: { ...s.settlement, connectivity: 20 },
-          skills: { ...s.skills, networking: s.skills.networking + 20 }
+          xp: s.xp + 50,
+          discoveredFragments: [...s.discoveredFragments, 'subnetting-manual'],
+          skills: { ...s.skills, networking: s.skills.networking + 15 }
         })
       }
     ]
   },
-  'haven-contact': {
-    id: 'haven-contact',
-    speaker: 'ELARA (HAVEN LEADER)',
-    text: 'Technician! You fixed the link! We\'ve been isolated for months. Our power grid is failing, and we need a Project Manager to lead the repair teams.',
-    choices: [
-      { text: 'Head to Haven (Project Management)', nextSceneId: 'pm-challenge-complex' },
-      { text: 'Fix their local network first (IT Support)', nextSceneId: 'it-support-complex' }
-    ]
-  },
-  'pm-challenge-complex': {
-    id: 'pm-challenge-complex',
-    speaker: 'PROJECT TERMINAL',
-    text: 'To rebuild the power grid, you must manage multiple stakeholders and resources. What is the document that formally authorizes the existence of a project?',
-    challenge: {
-      question: 'Which document provides the project manager with the authority to apply organizational resources to project activities?',
-      options: ['Project Management Plan', 'Project Charter', 'Work Performance Data', 'Business Case'],
-      correctIndex: 1,
-      explanation: 'The Project Charter is the document that formally authorizes the project and gives the PM authority.',
-      failSceneId: 'failed-pm'
-    },
-    choices: [
-      { 
-        text: 'Approve the Charter and begin work', 
-        nextSceneId: 'settlement-growing',
-        action: (s) => ({ 
-          ...s, 
-          settlement: { ...s.settlement, stability: 30, power: 40 },
-          skills: { ...s.skills, management: s.skills.management + 25 }
-        })
-      }
-    ]
-  },
-  'it-support-complex': {
-    id: 'it-support-complex',
+  'look-exit': {
+    id: 'look-exit',
     speaker: 'SELF',
-    text: 'The Haven local network is a mess. Devices can\'t communicate even though they are on the same switch. You suspect a VLAN configuration error.',
+    text: 'The main door is locked. A small label reads "PM-NODE-4". It seems you need to define the project scope to bypass the lockout.',
+    choices: [
+      { text: 'Access the PM Console', nextSceneId: 'pm-challenge-1' },
+      { text: 'Go back to the terminal', nextSceneId: 'terminal-init' }
+    ]
+  },
+  'pm-challenge-1': {
+    id: 'pm-challenge-1',
+    speaker: 'PM CONSOLE',
+    text: 'To unlock this sector, you must identify the key document that formally initiates a project and provides the project manager with authority.',
+    challenge: {
+      question: 'Which document formally authorizes the existence of a project?',
+      options: ['Project Management Plan', 'Project Charter', 'Business Case', 'Scope Statement'],
+      correctIndex: 1,
+      explanation: 'The Project Charter is the document that formally authorizes the project.',
+      failSceneId: 'failed-pm',
+      xpReward: 40
+    },
+    choices: [
+      { 
+        text: 'The door slides open', 
+        nextSceneId: 'outside-world',
+        action: (s) => ({ ...s, skills: { ...s.skills, management: s.skills.management + 10 } })
+      }
+    ]
+  },
+  'outside-world': {
+    id: 'outside-world',
+    speaker: 'ELARA',
+    text: 'Technician! We saw the signal flare from the server room. The Haven Settlement is in dire need of someone with your "Silicon" skills.',
+    choices: [
+      { 
+        text: '[NET 15] Fix the Settlement Network', 
+        nextSceneId: 'vlan-challenge',
+        requirements: { networking: 15 }
+      },
+      { 
+        text: '[MGT 10] Organize the Reconstruction', 
+        nextSceneId: 'rebuild-quest',
+        requirements: { management: 10 }
+      },
+      { text: 'Ask about the world', nextSceneId: 'world-lore' }
+    ]
+  },
+  'vlan-challenge': {
+    id: 'vlan-challenge',
+    speaker: 'TERMINAL',
+    text: 'The Haven network is unstable. Multiple broadcast domains are overlapping. You need to isolate the Scavenger team from the Life Support systems.',
     terminalChallenge: {
       prompt: 'Switch#',
+      mode: 'PRIVILEGED_EXEC',
       expectedCommand: 'show vlan brief',
-      hint: 'Use the command to see all VLAN assignments.',
-      successSceneId: 'vlan-fix',
-      failSceneId: 'failed-support'
+      hint: 'The command to view the current VLAN configuration.',
+      successSceneId: 'victory-demo',
+      failSceneId: 'failed-support',
+      xpReward: 100
     },
     choices: []
   },
-  'vlan-fix': {
-    id: 'vlan-fix',
-    speaker: 'SYSTEM',
-    text: 'VLAN database accessed. You reassign the ports correctly. The network hums to life.',
-    fragmentId: 'osi-deep-dive',
+  'forced-entry': {
+    id: 'forced-entry',
+    speaker: 'SELF',
+    text: 'Using your advanced management knowledge, you realize this door was built during the "Charter Crisis". You know the override code was the Project ID of the first Haven build.',
     choices: [
       { 
-        text: 'Proceed to Settlement Center', 
-        nextSceneId: 'settlement-growing',
-        action: (s) => ({ 
-          ...s, 
-          settlement: { ...s.settlement, connectivity: 50 },
-          skills: { ...s.skills, support: s.skills.support + 20 },
-          discoveredFragments: [...s.discoveredFragments, 'osi-deep-dive']
-        })
+        text: 'Bypass the door', 
+        nextSceneId: 'outside-world',
+        action: (s) => ({ ...s, xp: s.xp + 200, reputation: s.reputation + 10 })
       }
     ]
   },
-  'settlement-growing': {
-    id: 'settlement-growing',
-    speaker: 'SYSTEM',
-    text: 'SETTLEMENT STATUS UPDATED:\nPOWER: [||||      ]\nCONNECTIVITY: [|||||||   ]\nSTABILITY: [|||       ]\n\nThe people of Haven look to you for guidance. Rebuilding the Silicon world is a massive project, but with your skills, it\'s possible.',
+  'world-lore': {
+    id: 'world-lore',
+    speaker: 'ELARA',
+    text: 'The world ended when the "Last Patch" failed. Only those who remember the protocols of the Old Silicon can rebuild what was lost. We are the Haven, a small light in the dark.',
     choices: [
-      { text: 'Continue Expansion (Coming Soon)', nextSceneId: 'victory-demo' },
-      { text: 'Review Ancient Data Archives', nextSceneId: 'archive-view' }
-    ]
-  },
-  'archive-view': {
-    id: 'archive-view',
-    speaker: 'DATABASE',
-    text: 'ACCESSING DISCOVERED DATA FRAGMENTS...',
-    choices: [
-      { text: 'Return to Settlement', nextSceneId: 'settlement-growing' }
+      { text: 'I am ready to help', nextSceneId: 'outside-world' }
     ]
   },
   'failed-fix': {
     id: 'failed-fix',
     speaker: 'SYSTEM',
-    text: 'CRITICAL ERROR: SYSTEM LOCKOUT.\nYou entered an invalid command. The terminal goes dark. You must start over and recall your training.',
+    text: 'CRITICAL ERROR: SYSTEM LOCKOUT.\nYou must recall your training.',
+    choices: [{ text: 'Restart', nextSceneId: 'start' }]
+  },
+  'failed-pm': {
+    id: 'failed-pm',
+    speaker: 'SYSTEM',
+    text: 'AUTHORIZATION DENIED.\nProject Management methodology failed.',
     choices: [{ text: 'Try Again', nextSceneId: 'start' }]
   },
   'failed-support': {
     id: 'failed-support',
     speaker: 'SELF',
-    text: 'You start pulling wires randomly. A small explosion knocks you back. You need to follow the proper methodology.',
-    choices: [{ text: 'Try Again', nextSceneId: 'start' }]
-  },
-  'failed-pm': {
-    id: 'failed-pm',
-    speaker: 'SCAVENGER LEADER',
-    text: 'You have no idea how to manage this. The project falls apart before it even begins. Try again when you understand the lifecycle.',
+    text: 'You triggered a power surge. The equipment is fried.',
     choices: [{ text: 'Try Again', nextSceneId: 'start' }]
   },
   'victory-demo': {
     id: 'victory-demo',
     speaker: 'SYSTEM',
-    text: 'CONGRATULATIONS TECHNICIAN.\nYou have successfully used your CCNA, IT Support, and Project Management skills to begin the Silicon Reborn initiative.\n\nThis is just the beginning of your journey to restore the world.',
+    text: 'CONGRATULATIONS TECHNICIAN.\nYou have reached the end of this demo. Your skills are rebuilding the world.',
     choices: [
       { text: 'Restart Adventure', nextSceneId: 'start' }
     ]
   }
 };
-

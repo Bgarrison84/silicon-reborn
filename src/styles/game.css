@@ -127,13 +127,40 @@ body {
   box-shadow: 0 0 15px var(--terminal-green);
 }
 
-.stats-bar {
+.lvl-badge {
+  color: var(--terminal-highlight);
+  font-weight: bold;
+}
+
+.level-up-toast {
+  position: fixed;
+  top: 50px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--terminal-green);
+  color: var(--terminal-bg);
+  padding: 20px 40px;
+  border-radius: 8px;
+  font-size: 2em;
+  font-weight: bold;
+  z-index: 1000;
+  box-shadow: 0 0 30px var(--terminal-green);
   display: flex;
-  justify-content: space-between;
-  border-bottom: 1px solid var(--terminal-dim);
-  padding-bottom: 5px;
-  margin-bottom: 15px;
-  font-size: 0.8em;
+  align-items: center;
+  gap: 20px;
+}
+
+.choice-btn.locked {
+  border-color: var(--terminal-dim);
+  color: var(--terminal-dim);
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.choice-btn.locked:hover {
+  background: transparent;
+  box-shadow: none;
+  color: var(--terminal-dim);
 }
 
 .stat-group {

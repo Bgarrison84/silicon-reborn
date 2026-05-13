@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
-import { initialGameState, scenes, dataFragments } from './game/scenes';
-import type { GameState, Scene, TerminalChallenge } from './game/scenes';
-import { Cpu, Shield, Settings, Database, Activity, Zap, Wifi } from 'lucide-react';
+import { initialGameState, scenes, dataFragments, XP_THRESHOLDS } from './game/scenes';
+import type { GameState, Scene, TerminalChallenge, Choice } from './game/scenes';
+import { Cpu, Shield, Settings, Activity, Zap, Wifi, Star, TrendingUp } from 'lucide-react';
 import './styles/game.css';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const TerminalSim = ({ challenge, onComplete }: { challenge: TerminalChallenge, onComplete: (success: boolean) => void }) => {
+const STORAGE_KEY = 'silicon_reborn_save';
+
+const TerminalSim = ({ challenge, onComplete }: { challenge: TerminalChallenge, onComplete: (success: boolean, xpReward?: number) => void }) => {
   const [input, setInput] = useState('');
   const [history, setHistory] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -18,7 +20,7 @@ const TerminalSim = ({ challenge, onComplete }: { challenge: TerminalChallenge, 
     if (cmd === challenge.expectedCommand.toLowerCase()) {
       newHistory.push('SUCCESS: COMMAND ACCEPTED');
       setHistory(newHistory);
-      setTimeout(() => onComplete(true), 1000);
+      setTimeout(() => onComplete(true, challenge.xpReward), 1000);
     } else if (cmd === 'help' || cmd === '?') {
       newHistory.push(`HINT: ${challenge.hint}`);
       setHistory(newHistory);
@@ -61,14 +63,23 @@ const TerminalSim = ({ challenge, onComplete }: { challenge: TerminalChallenge, 
 };
 
 function App() {
-  const [gameState, setGameState] = useState<GameState>(initialGameState);
+  const [gameState, setGameState] = useState<GameState>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved ? JSON.parse(saved) : initialGameState;
+  });
+
   const [displayedText, setDisplayedText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [showChallenge, setShowChallenge] = useState(false);
   const [showTerminal, setShowTerminal] = useState(false);
   const [challengeSolved, setChallengeSolved] = useState(false);
+  const [levelUp, setLevelUp] = useState<number | null>(null);
 
   const currentScene: Scene = scenes[gameState.currentSceneId] || scenes['start'];
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(gameState));
+  }, [gameState]);
 
   useEffect(() => {
     let index = 0;
@@ -97,6 +108,22 @@ function App() {
     return () => clearInterval(timer);
   }, [gameState.currentSceneId]);
 
+  const addXP = (amount: number) => {
+    setGameState(prev => {
+      const newXP = prev.xp + amount;
+      let newLevel = prev.level;
+      for (let i = 0; i < XP_THRESHOLDS.length; i++) {
+        if (newXP >= XP_THRESHOLDS[i]) newLevel = i + 1;
+        else break;
+      }
+      if (newLevel > prev.level) {
+        setLevelUp(newLevel);
+        setTimeout(() => setLevelUp(null), 3000);
+      }
+      return { ...prev, xp: newXP, level: newLevel };
+    });
+  };
+
   const handleChoice = (sceneId: string, action?: (s: GameState) => GameState) => {
     if (isTyping) return;
     let nextState = { ...gameState, currentSceneId: sceneId };
@@ -110,21 +137,31 @@ function App() {
     if (currentScene.challenge && index === currentScene.challenge.correctIndex) {
       setChallengeSolved(true);
       setShowChallenge(false);
+      if (currentScene.challenge.xpReward) addXP(currentScene.challenge.xpReward);
     } else if (currentScene.challenge) {
       handleChoice(currentScene.challenge.failSceneId);
     }
   };
 
-  const handleTerminalComplete = (success: boolean) => {
+  const handleTerminalComplete = (success: boolean, xpReward?: number) => {
     if (success && currentScene.terminalChallenge) {
       setChallengeSolved(true);
       setShowTerminal(false);
-      // Automatically proceed if there's only one logical path or a specific success trigger
-      // For now, we wait for user to click a "Proceed" button if we want, or just trigger the next scene if it's clear.
-      // But scenes with terminalChallenges usually have empty choices until solved.
+      if (xpReward) addXP(xpReward);
     } else if (currentScene.terminalChallenge) {
       handleChoice(currentScene.terminalChallenge.failSceneId);
     }
+  };
+
+  const checkRequirements = (choice: Choice) => {
+    if (!choice.requirements) return true;
+    const req = choice.requirements;
+    if (req.level && gameState.level < req.level) return false;
+    if (req.networking && gameState.skills.networking < req.networking) return false;
+    if (req.support && gameState.skills.support < req.support) return false;
+    if (req.management && gameState.skills.management < req.management) return false;
+    if (req.fragments && !req.fragments.every(f => gameState.discoveredFragments.includes(f))) return false;
+    return true;
   };
 
   const renderArchive = () => (
@@ -154,7 +191,24 @@ function App() {
       <div className="scanline"></div>
       <div className="crt-frame"></div>
 
+      <AnimatePresence>
+        {levelUp && (
+          <motion.div 
+            initial={{ y: -100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -100, opacity: 0 }}
+            className="level-up-toast"
+          >
+            <TrendingUp size={32} /> LEVEL UP: {levelUp}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="stats-bar">
+        <div className="stat-group">
+          <span className="lvl-badge"><Star size={14} /> LVL: {gameState.level}</span>
+          <span>XP: {gameState.xp} / {XP_THRESHOLDS[gameState.level] || 'MAX'}</span>
+        </div>
         <div className="stat-group">
           <span><Cpu size={14} /> NET: {gameState.skills.networking}</span>
           <span><Settings size={14} /> SUP: {gameState.skills.support}</span>
@@ -164,7 +218,6 @@ function App() {
           <span><Zap size={14} /> PWR: {gameState.settlement.power}%</span>
           <span><Wifi size={14} /> CON: {gameState.settlement.connectivity}%</span>
           <span><Activity size={14} /> STB: {gameState.settlement.stability}%</span>
-          <span><Database size={14} /> ARCV: {gameState.discoveredFragments.length}</span>
         </div>
       </div>
 
@@ -231,15 +284,19 @@ function App() {
             animate={{ opacity: 1 }}
             className="choices-container"
           >
-            {currentScene.choices.map((choice, i) => (
-              <button 
-                key={i} 
-                className="choice-btn"
-                onClick={() => handleChoice(choice.nextSceneId, choice.action)}
-              >
-                &gt; {choice.text}
-              </button>
-            ))}
+            {currentScene.choices.map((choice, i) => {
+              const meetsReqs = checkRequirements(choice);
+              return (
+                <button 
+                  key={i} 
+                  className={`choice-btn ${!meetsReqs ? 'locked' : ''}`}
+                  onClick={() => meetsReqs && handleChoice(choice.nextSceneId, choice.action)}
+                  disabled={!meetsReqs}
+                >
+                  {meetsReqs ? `> ${choice.text}` : `[LOCKED] ${choice.text}`}
+                </button>
+              );
+            })}
             {currentScene.terminalChallenge && challengeSolved && (
               <button 
                 className="choice-btn"
@@ -248,6 +305,9 @@ function App() {
                 &gt; Continue...
               </button>
             )}
+            <button className="choice-btn" onClick={() => handleChoice('archive-view')}>
+              &gt; View Data Archives
+            </button>
           </motion.div>
         )}
       </div>
