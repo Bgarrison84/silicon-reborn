@@ -4,6 +4,14 @@ export interface Choice {
   action?: (state: GameState) => GameState;
 }
 
+export interface TerminalChallenge {
+  prompt: string;
+  expectedCommand: string;
+  hint: string;
+  successSceneId: string;
+  failSceneId: string;
+}
+
 export interface Scene {
   id: string;
   speaker: string;
@@ -16,6 +24,8 @@ export interface Scene {
     explanation: string;
     failSceneId: string;
   };
+  terminalChallenge?: TerminalChallenge;
+  fragmentId?: string; // ID of the Data Fragment discovered in this scene
 }
 
 export interface GameState {
@@ -27,6 +37,12 @@ export interface GameState {
     management: number;
   };
   reputation: number;
+  settlement: {
+    power: number;
+    connectivity: number;
+    stability: number;
+  };
+  discoveredFragments: string[];
 }
 
 export const initialGameState: GameState = {
@@ -37,124 +53,177 @@ export const initialGameState: GameState = {
     support: 0,
     management: 0
   },
-  reputation: 0
+  reputation: 0,
+  settlement: {
+    power: 0,
+    connectivity: 0,
+    stability: 0
+  },
+  discoveredFragments: []
+};
+
+export const dataFragments: Record<string, { title: string; link: string; snippet: string }> = {
+  'osi-deep-dive': {
+    title: 'Archive: OSI Layer 3',
+    link: 'https://Bgarrison84.github.io/ccna-guide/#/module/osi-model',
+    snippet: 'The Network layer is responsible for path determination and logical addressing. In the old world, routers were the guardians of this layer.'
+  },
+  'subnetting-manual': {
+    title: 'Manual: IP Math',
+    link: 'https://Bgarrison84.github.io/ccna-guide/#/module/subnetting',
+    snippet: 'Subnetting allowed the ancients to divide their massive networks into manageable pieces. A /26 mask equals 255.255.255.192.'
+  }
 };
 
 export const scenes: Record<string, Scene> = {
   start: {
     id: 'start',
     speaker: 'SYSTEM',
-    text: 'NEURAL LINK ESTABLISHED...\nYEAR: 2142\nLOCATION: SECTOR 7 WASTELAND\n\nYou wake up in a collapsed server room. Dust hangs thick in the air. A flickering terminal in front of you is the only source of light.',
+    text: 'NEURAL LINK ESTABLISHED...\nYEAR: 2142\nLOCATION: SECTOR 7 WASTELAND\n\nYou wake up in a collapsed server room. The air smells of ozone and decay. A terminal flickers, its green glow illuminating a dusty manual on the floor.',
     choices: [
-      { text: 'Inspect the terminal', nextSceneId: 'inspect-terminal' },
-      { text: 'Look for an exit', nextSceneId: 'look-exit' }
+      { text: 'Pick up the dusty manual', nextSceneId: 'found-manual' },
+      { text: 'Login to the terminal', nextSceneId: 'terminal-login' }
     ]
   },
-  'inspect-terminal': {
-    id: 'inspect-terminal',
+  'found-manual': {
+    id: 'found-manual',
+    speaker: 'SELF',
+    text: 'It\'s an ancient training guide. Most pages are torn, but a section on IPv4 addressing is still readable.',
+    fragmentId: 'subnetting-manual',
+    choices: [
+      { 
+        text: 'Access the terminal with this new knowledge', 
+        nextSceneId: 'terminal-login',
+        action: (s) => ({ ...s, discoveredFragments: [...s.discoveredFragments, 'subnetting-manual'] })
+      }
+    ]
+  },
+  'terminal-login': {
+    id: 'terminal-login',
     speaker: 'TERMINAL',
-    text: '> ERROR: NETWORK UNREACHABLE\n> DIAGNOSTIC: LAYER 3 LINK DOWN\n\nThe console is waiting for a command. You remember your training... the old world relied on these protocols.',
-    choices: [
-      { text: 'Attempt to fix the routing table', nextSceneId: 'ccna-challenge-1' },
-      { text: 'Search the room for a physical manual', nextSceneId: 'search-manual' }
-    ]
-  },
-  'ccna-challenge-1': {
-    id: 'ccna-challenge-1',
-    speaker: 'TUTORIAL',
-    text: 'To restore the link, you must identify which layer of the OSI model handles routing and logical addressing. This is crucial for rebuilding the communication nodes.',
-    challenge: {
-      question: 'Which OSI layer is responsible for path determination and IP addressing?',
-      options: ['Data Link (Layer 2)', 'Network (Layer 3)', 'Transport (Layer 4)', 'Session (Layer 5)'],
-      correctIndex: 1,
-      explanation: 'Layer 3, the Network layer, is where routers operate and logical IP addressing occurs.',
+    text: 'RE-CORE OS v4.2.1\nLOGIN REQUIRED...\n\nTo bypass the lockout, you must demonstrate basic IOS proficiency. Enter the command to enter Privileged EXEC mode.',
+    terminalChallenge: {
+      prompt: 'Router>',
+      expectedCommand: 'enable',
+      hint: 'The ancients used "enable" to gain higher privileges.',
+      successSceneId: 'config-mode',
       failSceneId: 'failed-fix'
     },
-    choices: [
-      { 
-        text: 'Proceed after fixing the link', 
-        nextSceneId: 'link-restored',
-        action: (s) => ({ ...s, skills: { ...s.skills, networking: s.skills.networking + 10 } })
-      }
-    ]
+    choices: []
   },
-  'look-exit': {
-    id: 'look-exit',
-    speaker: 'SELF',
-    text: 'The door is electronically locked. A small keypad is sparks occasionally. "Project Management Node 4" is etched into the metal.',
-    choices: [
-      { text: 'Try to bypass the lock using Support skills', nextSceneId: 'it-support-challenge-1' },
-      { text: 'Go back to the terminal', nextSceneId: 'inspect-terminal' }
-    ]
-  },
-  'it-support-challenge-1': {
-    id: 'it-support-challenge-1',
-    speaker: 'TUTORIAL',
-    text: 'Standard troubleshooting methodology applies here. What is the very first step in the Cisco Troubleshooting Methodology?',
-    challenge: {
-      question: 'What is the first step in the troubleshooting process?',
-      options: ['Define the problem', 'Gather facts', 'Consider possibilities', 'Create an action plan'],
-      correctIndex: 0,
-      explanation: 'The first step is always to clearly Define the Problem before moving to fact gathering.',
-      failSceneId: 'failed-support'
+  'config-mode': {
+    id: 'config-mode',
+    speaker: 'TERMINAL',
+    text: 'PRIVILEGED ACCESS GRANTED.\n\nNow, enter the command to enter Global Configuration mode.',
+    terminalChallenge: {
+      prompt: 'Router#',
+      expectedCommand: 'configure terminal',
+      hint: 'Short for "config t".',
+      successSceneId: 'restore-comm-link',
+      failSceneId: 'failed-fix'
     },
+    choices: []
+  },
+  'restore-comm-link': {
+    id: 'restore-comm-link',
+    speaker: 'SYSTEM',
+    text: 'CONFIG MODE ENABLED.\nYou have restored the core routing protocols. The Haven Settlement suddenly appears on your scan.',
     choices: [
       { 
-        text: 'The door slides open', 
-        nextSceneId: 'outside-world',
-        action: (s) => ({ ...s, skills: { ...s.skills, support: s.skills.support + 10 } })
+        text: 'Transmit coordinates to Haven', 
+        nextSceneId: 'haven-contact',
+        action: (s) => ({ 
+          ...s, 
+          settlement: { ...s.settlement, connectivity: 20 },
+          skills: { ...s.skills, networking: s.skills.networking + 20 }
+        })
       }
     ]
   },
-  'link-restored': {
-    id: 'link-restored',
-    speaker: 'SYSTEM',
-    text: 'LINK STATE: UP\nCOMMUNICATIONS RESTORED\n\nA voice crackles through a speaker: "Is anyone there? This is the Haven Settlement. We lost our local network. We need a technician to manage the reconstruction project."',
+  'haven-contact': {
+    id: 'haven-contact',
+    speaker: 'ELARA (HAVEN LEADER)',
+    text: 'Technician! You fixed the link! We\'ve been isolated for months. Our power grid is failing, and we need a Project Manager to lead the repair teams.',
     choices: [
-      { text: 'Accept the mission (Project Management)', nextSceneId: 'pm-intro' },
-      { text: 'Ask for more technical details', nextSceneId: 'more-tech' }
+      { text: 'Head to Haven (Project Management)', nextSceneId: 'pm-challenge-complex' },
+      { text: 'Fix their local network first (IT Support)', nextSceneId: 'it-support-complex' }
     ]
   },
-  'outside-world': {
-    id: 'outside-world',
-    speaker: 'SELF',
-    text: 'You step out into the sunlight. The ruins of a data center tower over you. A group of scavengers is trying to wire up a makeshift generator.',
-    choices: [
-      { text: 'Help them organize the repair project', nextSceneId: 'pm-intro' },
-      { text: 'Show them how to secure the connection', nextSceneId: 'ccna-challenge-1' }
-    ]
-  },
-  'pm-intro': {
-    id: 'pm-intro',
-    speaker: 'SCAVENGER LEADER',
-    text: 'We have the parts, but no plan. To rebuild Sector 7, we need to understand the project lifecycle. What is the phase where we actually build the deliverables?',
+  'pm-challenge-complex': {
+    id: 'pm-challenge-complex',
+    speaker: 'PROJECT TERMINAL',
+    text: 'To rebuild the power grid, you must manage multiple stakeholders and resources. What is the document that formally authorizes the existence of a project?',
     challenge: {
-      question: 'In the project lifecycle, which phase involves the actual creation of the project products?',
-      options: ['Initiating', 'Planning', 'Executing', 'Closing'],
-      correctIndex: 2,
-      explanation: 'The Execution phase is where the work planned is performed to create the project deliverables.',
+      question: 'Which document provides the project manager with the authority to apply organizational resources to project activities?',
+      options: ['Project Management Plan', 'Project Charter', 'Work Performance Data', 'Business Case'],
+      correctIndex: 1,
+      explanation: 'The Project Charter is the document that formally authorizes the project and gives the PM authority.',
       failSceneId: 'failed-pm'
     },
     choices: [
       { 
-        text: 'Organize the team and begin reconstruction', 
-        nextSceneId: 'victory-demo',
-        action: (s) => ({ ...s, skills: { ...s.skills, management: s.skills.management + 10 } })
+        text: 'Approve the Charter and begin work', 
+        nextSceneId: 'settlement-growing',
+        action: (s) => ({ 
+          ...s, 
+          settlement: { ...s.settlement, stability: 30, power: 40 },
+          skills: { ...s.skills, management: s.skills.management + 25 }
+        })
       }
     ]
   },
-  'victory-demo': {
-    id: 'victory-demo',
+  'it-support-complex': {
+    id: 'it-support-complex',
+    speaker: 'SELF',
+    text: 'The Haven local network is a mess. Devices can\'t communicate even though they are on the same switch. You suspect a VLAN configuration error.',
+    terminalChallenge: {
+      prompt: 'Switch#',
+      expectedCommand: 'show vlan brief',
+      hint: 'Use the command to see all VLAN assignments.',
+      successSceneId: 'vlan-fix',
+      failSceneId: 'failed-support'
+    },
+    choices: []
+  },
+  'vlan-fix': {
+    id: 'vlan-fix',
     speaker: 'SYSTEM',
-    text: 'CONGRATULATIONS TECHNICIAN.\nYou have successfully used your CCNA, IT Support, and Project Management skills to begin the Silicon Reborn initiative.\n\nThis is just the beginning of your journey to restore the world.',
+    text: 'VLAN database accessed. You reassign the ports correctly. The network hums to life.',
+    fragmentId: 'osi-deep-dive',
     choices: [
-      { text: 'Restart Adventure', nextSceneId: 'start' }
+      { 
+        text: 'Proceed to Settlement Center', 
+        nextSceneId: 'settlement-growing',
+        action: (s) => ({ 
+          ...s, 
+          settlement: { ...s.settlement, connectivity: 50 },
+          skills: { ...s.skills, support: s.skills.support + 20 },
+          discoveredFragments: [...s.discoveredFragments, 'osi-deep-dive']
+        })
+      }
+    ]
+  },
+  'settlement-growing': {
+    id: 'settlement-growing',
+    speaker: 'SYSTEM',
+    text: 'SETTLEMENT STATUS UPDATED:\nPOWER: [||||      ]\nCONNECTIVITY: [|||||||   ]\nSTABILITY: [|||       ]\n\nThe people of Haven look to you for guidance. Rebuilding the Silicon world is a massive project, but with your skills, it\'s possible.',
+    choices: [
+      { text: 'Continue Expansion (Coming Soon)', nextSceneId: 'victory-demo' },
+      { text: 'Review Ancient Data Archives', nextSceneId: 'archive-view' }
+    ]
+  },
+  'archive-view': {
+    id: 'archive-view',
+    speaker: 'DATABASE',
+    text: 'ACCESSING DISCOVERED DATA FRAGMENTS...',
+    choices: [
+      { text: 'Return to Settlement', nextSceneId: 'settlement-growing' }
     ]
   },
   'failed-fix': {
     id: 'failed-fix',
     speaker: 'SYSTEM',
-    text: 'CRITICAL ERROR: SYSTEM LOCKOUT.\nYou entered the wrong protocol parameters. The terminal goes dark. You must start over and recall your training.',
+    text: 'CRITICAL ERROR: SYSTEM LOCKOUT.\nYou entered an invalid command. The terminal goes dark. You must start over and recall your training.',
     choices: [{ text: 'Try Again', nextSceneId: 'start' }]
   },
   'failed-support': {
@@ -168,5 +237,14 @@ export const scenes: Record<string, Scene> = {
     speaker: 'SCAVENGER LEADER',
     text: 'You have no idea how to manage this. The project falls apart before it even begins. Try again when you understand the lifecycle.',
     choices: [{ text: 'Try Again', nextSceneId: 'start' }]
+  },
+  'victory-demo': {
+    id: 'victory-demo',
+    speaker: 'SYSTEM',
+    text: 'CONGRATULATIONS TECHNICIAN.\nYou have successfully used your CCNA, IT Support, and Project Management skills to begin the Silicon Reborn initiative.\n\nThis is just the beginning of your journey to restore the world.',
+    choices: [
+      { text: 'Restart Adventure', nextSceneId: 'start' }
+    ]
   }
 };
+

@@ -136,6 +136,22 @@ body {
   font-size: 0.8em;
 }
 
+.stat-group {
+  display: flex;
+  gap: 15px;
+}
+
+.terminal-input {
+  caret-color: var(--terminal-green);
+}
+
+.card {
+  background: rgba(0, 20, 0, 0.8);
+  padding: 15px;
+  border-radius: 4px;
+  margin-bottom: 10px;
+}
+
 .terminal-text {
   line-height: 1.4;
   white-space: pre-wrap;
